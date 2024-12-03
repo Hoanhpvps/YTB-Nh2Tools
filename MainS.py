@@ -21,6 +21,7 @@ from PyQt5.QtGui import QFont
 from PyQt5.QtCore import Qt, QTimer
 from loading_screen import LoadingScreen
 from network_checker import NetworkChecker
+from auto_updater import AutoUpdater  # Thêm dòng này vào phần import
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -37,22 +38,7 @@ class MainWindow(QMainWindow):
         if needs_update:
             self.loading_screen.close()
             sys.exit()
-            
-        # Tiếp tục với các kiểm tra khác
-        self.loading_screen.status_label.setText("Đang kiểm tra kết nối internet...")
-        internet_ok, internet_msg = NetworkChecker.check_internet()
-        if not internet_ok:
-            self.loading_screen.show_error(internet_msg)
-            return
         
-    def init_loading_screen(self):
-        self.loading_screen = LoadingScreen()
-        self.loading_screen.show()
-        
-        # Sử dụng QTimer để kiểm tra không đồng bộ
-        QTimer.singleShot(1000, self.check_requirements)
-    
-    def check_requirements(self):
         # Kiểm tra kết nối internet
         self.loading_screen.status_label.setText("Đang kiểm tra kết nối internet...")
         internet_ok, internet_msg = NetworkChecker.check_internet()
@@ -61,7 +47,7 @@ class MainWindow(QMainWindow):
             return
             
         # Kiểm tra Gemini API
-        self.loading_screen.status_label.setText("Đang Kiểm Ứng Dụng ...") #Đang kiểm tra Gemini API...
+        self.loading_screen.status_label.setText("Đang Kiểm Ứng Dụng ...")
         api_ok, api_msg = NetworkChecker.check_gemini_api()
         if not api_ok:
             self.loading_screen.show_error(api_msg)
@@ -70,6 +56,14 @@ class MainWindow(QMainWindow):
         # Nếu mọi thứ OK, khởi tạo giao diện chính
         self.loading_screen.status_label.setText("Đang khởi tạo ứng dụng...")
         QTimer.singleShot(1000, self.initialize_main_ui)
+
+        
+    def init_loading_screen(self):
+        self.loading_screen = LoadingScreen()
+        self.loading_screen.show()
+        
+        # Sử dụng QTimer để kiểm tra không đồng bộ
+        QTimer.singleShot(1000, self.check_requirements)
     
     def initialize_main_ui(self):
         # Đóng màn hình loading

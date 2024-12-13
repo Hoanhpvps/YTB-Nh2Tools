@@ -7,6 +7,76 @@ from datetime import datetime
 from PyQt5.QtCore import QThread, pyqtSignal
 import shutil
 import math
+from PyQt5.QtWidgets import QDialog, QVBoxLayout, QCheckBox, QPushButton, QScrollArea, QWidget, QLabel, QDialog
+from PyQt5.QtCore import Qt
+
+class EffectSelectorDialog(QDialog):
+    def __init__(self, effects, parent=None):
+        super().__init__(parent)
+        self.effects = effects
+        self.selected_effects = []
+        self.initUI()
+
+    def initUI(self):
+        self.setWindowTitle('Select Transition Effects')
+        self.setMinimumWidth(300)
+        layout = QVBoxLayout()
+
+        # Add link to FFmpeg xfade documentation
+        doc_label = QLabel('View effects examples: <a href="https://trac.ffmpeg.org/wiki/Xfade">FFmpeg Xfade Documentation</a>')
+        doc_label.setOpenExternalLinks(True)
+        layout.addWidget(doc_label)
+
+        # Create scrollable area
+        scroll = QScrollArea()
+        scroll_widget = QWidget()
+        scroll_layout = QVBoxLayout()
+
+        # Add checkboxes for each effect
+        self.checkboxes = {}
+        for effect in self.effects:
+            cb = QCheckBox(effect)
+            cb.setChecked(True)  # Default all selected
+            self.checkboxes[effect] = cb
+            scroll_layout.addWidget(cb)
+
+        scroll_widget.setLayout(scroll_layout)
+        scroll.setWidget(scroll_widget)
+        scroll.setWidgetResizable(True)
+        layout.addWidget(scroll)
+
+        # Add Select All/None buttons
+        btn_layout = QVBoxLayout()
+        select_all = QPushButton('Select All')
+        select_none = QPushButton('Select None')
+        select_all.clicked.connect(self.select_all_effects)
+        select_none.clicked.connect(self.select_no_effects)
+        btn_layout.addWidget(select_all)
+        btn_layout.addWidget(select_none)
+        layout.addLayout(btn_layout)
+
+        # Add OK/Cancel buttons
+        buttons = QVBoxLayout()
+        ok_button = QPushButton('OK')
+        cancel_button = QPushButton('Cancel')
+        ok_button.clicked.connect(self.accept)
+        cancel_button.clicked.connect(self.reject)
+        buttons.addWidget(ok_button)
+        buttons.addWidget(cancel_button)
+        layout.addLayout(buttons)
+
+        self.setLayout(layout)
+
+    def select_all_effects(self):
+        for cb in self.checkboxes.values():
+            cb.setChecked(True)
+
+    def select_no_effects(self):
+        for cb in self.checkboxes.values():
+            cb.setChecked(False)
+
+    def get_selected_effects(self):
+        return [effect for effect, cb in self.checkboxes.items() if cb.isChecked()]
 
 class VideoProcessor:
     def __init__(self, progress_callback=None):
@@ -20,14 +90,59 @@ class VideoProcessor:
             "dissolve", "hblur", "hlwind", "hrwind", "vuwind", "vdwind"
         ]
 
+    def set_selected_effects(self, effects):
+        if effects:
+            self.selected_effects = effects
+        else:
+            self.selected_effects = self.TRANSITION_EFFECTS.copy()
+            
     def update_progress(self, message, percentage=None):
         if self.progress_callback:
             self.progress_callback(message, percentage)
 
     def get_video_duration(self, video_path):
-        """Get duration of video file"""
-        with VideoFileClip(video_path) as clip:
-            return clip.duration
+        """Get duration of video file using ffprobe"""
+        cmd = [
+            'ffprobe',
+            '-v', 'error',
+            '-select_streams', 'v:0',
+            '-show_entries', 'format=duration',  # Thay đổi từ stream sang format
+            '-of', 'default=noprint_wrappers=1:nokey=1',
+            f'{video_path}'
+        ]
+        
+        try:
+            result = subprocess.run(
+                ' '.join(cmd),
+                shell=True,
+                capture_output=True,
+                text=True
+            )
+            duration = result.stdout.strip()
+            
+            if duration:
+                return float(duration)
+            else:
+                # Sử dụng phương thức dự phòng nếu ffprobe không trả về duration
+                cmd_backup = [
+                    'ffprobe',
+                    '-v', 'error',
+                    '-show_entries', 'stream=duration',
+                    '-of', 'default=noprint_wrappers=1:nokey=1',
+                    f'{video_path}'
+                ]
+                result_backup = subprocess.run(
+                    ' '.join(cmd_backup),
+                    shell=True,
+                    capture_output=True,
+                    text=True
+                )
+                return float(result_backup.stdout.strip() or 0)
+        except (ValueError, subprocess.CalledProcessError):
+            # Trả về giá trị mặc định nếu không thể đọc duration
+            return 0
+
+
 
     def merge_videos_with_effects(self, video_paths, temp_dir):
         """Merge videos with transition effects using FFmpeg"""
@@ -35,7 +150,7 @@ class VideoProcessor:
         print(f"Number of videos: {len(video_paths)}")
 
         # Convert paths to proper format
-        video_paths = [f'"{path.replace("\\", "/")}"' for path in video_paths]
+        video_paths = [f'"{path.encode("utf-8", errors="ignore").decode("utf-8").replace("\\", "/")}"' for path in video_paths]
         temp_video = os.path.join(temp_dir, 'temp_merged.mp4').replace("\\", "/")
         
         # Build FFmpeg command
@@ -59,7 +174,7 @@ class VideoProcessor:
 
         # Build transition effects
         for i in range(len(video_paths)-1):
-            effect = random.choice(self.TRANSITION_EFFECTS)
+            effect = random.choice(getattr(self, 'selected_effects', self.TRANSITION_EFFECTS))
             duration = 1  # Fixed transition duration
             
             if i == 0:
@@ -111,7 +226,7 @@ class VideoProcessor:
             # Fallback to simple concatenation if effects fail
             print("Falling back to simple concatenation...")
             concat_file = os.path.join(temp_dir, 'concat.txt')
-            with open(concat_file, 'w', encoding='utf-8') as f:
+            with open(concat_file, 'w', encoding='utf-8', errors='ignore') as f:
                 for path in video_paths:
                     f.write(f"file {path}\n")
                     
@@ -140,7 +255,7 @@ class VideoProcessor:
         else:
             # Simple concatenation without effects
             concat_file = os.path.join(temp_dir, 'concat.txt')
-            with open(concat_file, 'w', encoding='utf-8') as f:
+            with open(concat_file, 'w', encoding='utf-8', errors='ignore') as f:
                 for path in selected_videos:
                     f.write(f"file '{path}'\n")
                     
@@ -187,7 +302,7 @@ class VideoProcessor:
         
         # Create concat file with absolute paths
         concat_file = os.path.join(temp_dir, 'audio_concat.txt')
-        with open(concat_file, 'w', encoding='utf-8') as f:
+        with open(concat_file, 'w', encoding='utf-8', errors='ignore') as f:
             for path in selected_audio:
                 f.write(f"file '{os.path.abspath(path)}'\n")
                 
@@ -263,7 +378,7 @@ class VideoProcessor:
             loop_count = math.ceil(target_duration / video_duration)
         
         # Create concat file
-        with open(concat_file, 'w', encoding='utf-8') as f:
+        with open(concat_file, 'w', encoding='utf-8', errors='ignore') as f:
             for _ in range(loop_count):
                 f.write(f"file '{os.path.abspath(video_path)}'\n")
         
@@ -289,11 +404,10 @@ class VideoProcessor:
         return output_path
 
     def process_final_video(self, video_path, audio_path, loop_params):
-        """Process video with the following steps:
-        1. Merge selected videos
-        2. Merge with audio to create temp_AV1
-        3. Loop temp_AV1 to create final video
-        """
+        # Add duration validation
+        video_duration = self.get_video_duration(video_path)
+        if video_duration <= 0:
+            video_duration = 1  # Set minimum duration to prevent division by zero
         temp_dir = os.path.abspath('temp')
         
         # Step 1-2: Create temp_AV1 by combining video and audio
@@ -325,13 +439,23 @@ class VideoProcessor:
         temp_dir = os.path.abspath('temp')
         output_path = os.path.join(temp_dir, f'loop_{output_name}.mp4')
         
-        # Calculate number of loops needed
+        # Calculate number of loops needed with validation
         video_duration = self.get_video_duration(input_video)
+        if video_duration <= 0:
+            video_duration = 1  # Set minimum duration
+        
+        # Ensure target_duration is valid
+        if target_duration <= 0:
+            target_duration = video_duration
+        
         loop_count = math.ceil(target_duration / video_duration)
+        
+        # Ensure at least one loop
+        loop_count = max(1, loop_count)
         
         # Create concat file
         concat_file = os.path.join(temp_dir, 'final_loop.txt')
-        with open(concat_file, 'w', encoding='utf-8') as f:
+        with open(concat_file, 'w', encoding='utf-8', errors='ignore') as f:
             for _ in range(loop_count):
                 f.write(f"file '{os.path.abspath(input_video)}'\n")
         
@@ -341,13 +465,14 @@ class VideoProcessor:
             '-f', 'concat',
             '-safe', '0',
             '-i', f'"{concat_file}"',
-            '-t', str(target_duration),  # Set exact target duration
+            '-t', str(target_duration),
             '-c', 'copy',
             f'"{output_path}"'
         ]
         
         subprocess.run(' '.join(cmd), shell=True, check=True)
         return output_path
+
 
     def combine_video_audio(self, video_path, audio_path):
         """Step 3: Combine video with looping to match audio duration"""
@@ -378,14 +503,14 @@ class VideoProcessor:
         return output_path
 
     def get_ffmpeg_progress(self, duration, line):
-        if "out_time_ms" in line:
+        if "out_time_ms" in line and duration > 0:  # Add check for duration > 0
             try:
                 time_ms = int(line.split('=')[1])
                 time_s = time_ms / 1000000.0
                 progress = min(int((time_s / float(duration)) * 100), 100)
                 self.update_progress(f"Processing: {progress}%", progress)
             except (ValueError, IndexError):
-                pass
+                self.update_progress("Processing...", 50)  # Default progress value
 
 class VideoRenderThread(QThread):
     progress_updated = pyqtSignal(str, int)

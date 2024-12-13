@@ -22,6 +22,7 @@ from PyQt5.QtCore import Qt, QTimer
 from loading_screen import LoadingScreen
 from network_checker import NetworkChecker
 from auto_updater import AutoUpdater  # Thêm dòng này vào phần import
+from tabs.comment_youtube import comment_youtube
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -70,7 +71,7 @@ class MainWindow(QMainWindow):
         self.loading_screen.close()
         
         # Khởi tạo giao diện chính
-        self.setWindowTitle("NH IMS full tools")
+        self.setWindowTitle("NH IMS full tools V1.01")
         self.setGeometry(100, 100, 1524, 768)
         self.setAcceptDrops(True)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
@@ -106,17 +107,20 @@ class MainWindow(QMainWindow):
         self.setAcceptDrops(True)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         # Create and add tabs
+        # Create and add tabs
         self.tabs.addTab(ConvertFileTab(), "Convert File")
-        self.tabs.addTab(MergeAVTab(), "Ghép audio and video")
+        self.tabs.addTab(CreateLongVideoTab(), "Tạo ViDeo Tự Động")
+        self.tabs.addTab(CreateTitleTab(), "Viết tiêu đề và mô tả")
+        self.tabs.addTab(MergeAVTab(), "Ghép audio vào video")
         self.tabs.addTab(MergeFilesTab(), "Ghép nhiều file")
-        self.tabs.addTab(CreateShortTab(), "Create video Short")
-        self.tabs.addTab(LoopVideoTab(), "Loop video")
+        self.tabs.addTab(CreateShortTab(), "Tạo Video Short")
+        self.tabs.addTab(LoopVideoTab(), "Loop video và audio")
         self.tabs.addTab(MixAudioTab(), "Mix Audio")
         self.tabs.addTab(FixCameraTab(), "Fix Camera video")
-        self.tabs.addTab(CreateTitleTab(), "Create Title and description")
-        self.tabs.addTab(CreateLongVideoTab(), "Auto create long video")
         # Update the tab creation to use the new class name
-        self.tabs.addTab(UploadYoutubeTab(), "Upload Youtube")  # Changed class name
+        self.tabs.addTab(UploadYoutubeTab(), "Channel Manager")  # Changed class name
+        self.comment_tab = comment_youtube()
+        self.tabs.addTab(self.comment_tab, "YouTube Comments")
         self.tabs = QTabWidget()
         self.show()
 

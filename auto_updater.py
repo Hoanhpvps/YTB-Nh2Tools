@@ -7,7 +7,7 @@ from PyQt5.QtWidgets import QMessageBox
 class AutoUpdater:
     def __init__(self):
         self.current_version = "1.0.0"  # Version hiện tại
-        self.github_repo = "your-username/your-repo"  # Thay thế bằng repo của bạn
+        self.github_repo = "Hoanhpvps/YTB-Nh2Tools"  # Thay thế bằng repo của bạn
         
     def check_update(self, parent_widget):
         try:

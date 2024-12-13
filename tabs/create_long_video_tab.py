@@ -1,7 +1,7 @@
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, 
                             QFileDialog, QSizePolicy, QListWidget, QComboBox, QLineEdit, 
                             QProgressBar, QRadioButton, QButtonGroup, QTextEdit, QSpinBox,
-                            QGroupBox)
+                            QGroupBox, QDialog)
 from PyQt5.QtCore import Qt, QMimeData
 from PyQt5.QtGui import QFont, QDragEnterEvent, QDropEvent
 import os
@@ -17,7 +17,7 @@ from PyQt5.QtWidgets import QApplication
 import google.generativeai as genai
 import subprocess
 from PyQt5.QtWidgets import QMenu, QWidgetAction
-
+from .video_processor import EffectSelectorDialog
 
 class DragDropList(QListWidget):
     def __init__(self, is_video=True):
@@ -345,6 +345,9 @@ class CreateLongVideoTab(QWidget):
         merge_options.addWidget(self.video_count)
         merge_options.addWidget(QLabel("Effect:"))
         merge_options.addWidget(self.effect_combo)
+        self.select_effects_btn = QPushButton("Select Effects")
+        self.select_effects_btn.clicked.connect(self.open_effect_selector)
+        merge_options.addWidget(self.select_effects_btn)  # Add this line
         merge_options.addWidget(QLabel("Audios to merge:"))
         merge_options.addWidget(self.audio_count)
 
@@ -542,6 +545,14 @@ class CreateLongVideoTab(QWidget):
         except ValueError as e:
             self.progress_list.addItem(f"Duration Error: {str(e)}")
             return 60 # Default 1 minute if error
+
+    def open_effect_selector(self):
+        dialog = EffectSelectorDialog(self.video_processor.TRANSITION_EFFECTS, self)
+        if dialog.exec_() == QDialog.Accepted:  # Now QDialog should be defined
+            selected_effects = dialog.get_selected_effects()
+            self.video_processor.set_selected_effects(selected_effects)
+        else:
+            print("Error: VideoProcessor not initialized")
 
     def load_file_info(self, list_widget):
         """Handle loading file information with progress updates"""

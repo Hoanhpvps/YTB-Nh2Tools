@@ -101,14 +101,16 @@ class VideoProcessor:
             self.progress_callback(message, percentage)
 
     def get_video_duration(self, video_path):
-        """Get duration of video file using ffprobe"""
+        """Get duration of video file using ffprobe with enhanced validation"""
+        video_path = os.path.abspath(video_path).replace("\\", "/").strip('"')
+        
         cmd = [
             'ffprobe',
             '-v', 'error',
             '-select_streams', 'v:0',
-            '-show_entries', 'format=duration',  # Thay đổi từ stream sang format
+            '-show_entries', 'format=duration',
             '-of', 'default=noprint_wrappers=1:nokey=1',
-            f'{video_path}'
+            f'"{video_path}"'
         ]
         
         try:
@@ -120,29 +122,45 @@ class VideoProcessor:
             )
             duration = result.stdout.strip()
             
-            if duration:
+            # First validation attempt
+            if duration and duration.replace('.','',1).isdigit():
                 return float(duration)
-            else:
-                # Sử dụng phương thức dự phòng nếu ffprobe không trả về duration
-                cmd_backup = [
-                    'ffprobe',
-                    '-v', 'error',
-                    '-show_entries', 'stream=duration',
-                    '-of', 'default=noprint_wrappers=1:nokey=1',
-                    f'{video_path}'
-                ]
-                result_backup = subprocess.run(
-                    ' '.join(cmd_backup),
-                    shell=True,
-                    capture_output=True,
-                    text=True
-                )
-                return float(result_backup.stdout.strip() or 0)
-        except (ValueError, subprocess.CalledProcessError):
-            # Trả về giá trị mặc định nếu không thể đọc duration
+                
+            # Alternative method using mediainfo if available
+            try:
+                from pymediainfo import MediaInfo
+                media_info = MediaInfo.parse(video_path)
+                for track in media_info.tracks:
+                    if track.track_type == "Video":
+                        return float(track.duration) / 1000 if track.duration else 0
+            except ImportError:
+                pass
+                
+            # Final fallback using different ffprobe approach
+            cmd_backup = [
+                'ffprobe',
+                '-v', 'error',
+                '-select_streams', 'v:0',
+                '-show_entries', 'stream=duration',
+                '-of', 'default=noprint_wrappers=1:nokey=1',
+                f'"{video_path}"'
+            ]
+            
+            result_backup = subprocess.run(
+                ' '.join(cmd_backup),
+                shell=True,
+                capture_output=True,
+                text=True
+            )
+            duration_backup = result_backup.stdout.strip()
+            
+            if duration_backup and duration_backup.replace('.','',1).isdigit():
+                return float(duration_backup)
+                
             return 0
-
-
+            
+        except (ValueError, subprocess.CalledProcessError):
+            return 0
 
     def merge_videos_with_effects(self, video_paths, temp_dir):
         """Merge videos with transition effects using FFmpeg"""
@@ -150,7 +168,7 @@ class VideoProcessor:
         print(f"Number of videos: {len(video_paths)}")
 
         # Convert paths to proper format
-        video_paths = [f'"{path.encode("utf-8", errors="ignore").decode("utf-8").replace("\\", "/")}"' for path in video_paths]
+        video_paths = [f'"{path.replace("\\", "/")}"' for path in video_paths]
         temp_video = os.path.join(temp_dir, 'temp_merged.mp4').replace("\\", "/")
         
         # Build FFmpeg command
@@ -199,12 +217,18 @@ class VideoProcessor:
             '-colorspace', 'bt709',
             '-color_primaries', 'bt709', 
             '-color_trc', 'bt709',
-            '-preset', 'veryfast',
+            '-preset', 'slow',  # Changed from veryfast to slow for better quality
             '-c:v', 'libx264',
-            '-crf', '23',
+            '-crf', '18',      # Lowered CRF value (range 0-51, lower is better quality)
+            '-maxrate', '8M',   # Maximum bitrate
+            '-bufsize', '16M',  # Buffer size for rate control
+            '-profile:v', 'high',
+            '-level', '4.1',
             '-max_muxing_queue_size', '1024',
             f'"{temp_video}"'
         ])
+
+        print(' '.join(cmd_merge))
 
         try:
             # Execute command
@@ -270,12 +294,16 @@ class VideoProcessor:
                 f'"{output_path}"'
             ]
             
+            print(' '.join(cmd))  # Fixed line
+
             subprocess.run(' '.join(cmd), shell=True, check=True)
             self.update_progress("Video merge complete", 100)
             return output_path
 
     def get_audio_duration(self, audio_path):
-        """Get duration of audio file in seconds"""
+        """Get duration of audio file using ffprobe with robust validation"""
+        audio_path = os.path.abspath(audio_path).replace("\\", "/").strip('"')
+        
         cmd = [
             'ffprobe',
             '-v', 'error',
@@ -284,14 +312,17 @@ class VideoProcessor:
             f'"{audio_path}"'
         ]
         
-        result = subprocess.run(
-            ' '.join(cmd),
-            shell=True,
-            capture_output=True,
-            text=True
-        )
-        
-        return float(result.stdout.strip())
+        try:
+            result = subprocess.run(
+                ' '.join(cmd),
+                shell=True,
+                capture_output=True,
+                text=True
+            )
+            duration = result.stdout.strip()
+            return float(duration) if duration and duration.replace('.','',1).isdigit() else 0
+        except:
+            return 0
 
     def merge_audio(self, audio_paths, count):
         """Step 2: Merge selected audio files"""
@@ -306,7 +337,7 @@ class VideoProcessor:
             for path in selected_audio:
                 f.write(f"file '{os.path.abspath(path)}'\n")
                 
-        output_path = os.path.join(temp_dir, 'merged_audio.m4a')
+        output_path = os.path.join(temp_dir, 'merged_audio.mp3')
         
         # Updated FFmpeg command with proper audio encoding settings
         cmd = [
@@ -314,10 +345,10 @@ class VideoProcessor:
             '-f', 'concat',
             '-safe', '0',
             '-i', f'"{concat_file}"',
-            '-c:a', 'aac',
-            '-b:a', '192k',
-            '-ar', '44100',
-            '-ac', '2',
+            '-c:a', 'libmp3lame',
+            '-b:a', '320k',
+            '-abr', '0',           # Disable ABR (Average Bit Rate)
+            '-cbr', '1',
             f'"{output_path}"'
         ]
         
@@ -404,10 +435,11 @@ class VideoProcessor:
         return output_path
 
     def process_final_video(self, video_path, audio_path, loop_params):
-        # Add duration validation
-        video_duration = self.get_video_duration(video_path)
-        if video_duration <= 0:
-            video_duration = 1  # Set minimum duration to prevent division by zero
+        """Process video with the following steps:
+        1. Merge selected videos
+        2. Merge with audio to create temp_AV1
+        3. Loop temp_AV1 to create final video
+        """
         temp_dir = os.path.abspath('temp')
         
         # Step 1-2: Create temp_AV1 by combining video and audio
@@ -419,6 +451,10 @@ class VideoProcessor:
             '-i', f'"{audio_path}"',
             '-c:v', 'copy',
             '-c:a', 'aac',
+            '-b:a', '320k',
+            '-ar', '44100',
+            '-ac', '2',
+            '-strict', '2',
             f'"{temp_av1}"'
         ]
         subprocess.run(' '.join(cmd_combine), shell=True, check=True)
@@ -439,19 +475,9 @@ class VideoProcessor:
         temp_dir = os.path.abspath('temp')
         output_path = os.path.join(temp_dir, f'loop_{output_name}.mp4')
         
-        # Calculate number of loops needed with validation
+        # Calculate number of loops needed
         video_duration = self.get_video_duration(input_video)
-        if video_duration <= 0:
-            video_duration = 1  # Set minimum duration
-        
-        # Ensure target_duration is valid
-        if target_duration <= 0:
-            target_duration = video_duration
-        
         loop_count = math.ceil(target_duration / video_duration)
-        
-        # Ensure at least one loop
-        loop_count = max(1, loop_count)
         
         # Create concat file
         concat_file = os.path.join(temp_dir, 'final_loop.txt')
@@ -465,14 +491,13 @@ class VideoProcessor:
             '-f', 'concat',
             '-safe', '0',
             '-i', f'"{concat_file}"',
-            '-t', str(target_duration),
+            '-t', str(target_duration),  # Set exact target duration
             '-c', 'copy',
             f'"{output_path}"'
         ]
         
         subprocess.run(' '.join(cmd), shell=True, check=True)
         return output_path
-
 
     def combine_video_audio(self, video_path, audio_path):
         """Step 3: Combine video with looping to match audio duration"""
@@ -494,6 +519,10 @@ class VideoProcessor:
             '-map', '1:a',  # Take audio from second input
             '-c:v', 'copy',
             '-c:a', 'aac',
+            '-b:a', '320k',
+            '-ar', '44100',
+            '-ac', '2',
+            '-strict', '2',
             '-shortest',    # Cut when shortest input ends (audio)
             '-t', str(audio_duration),  # Explicitly set duration to audio length
             f'"{output_path}"'
@@ -503,14 +532,14 @@ class VideoProcessor:
         return output_path
 
     def get_ffmpeg_progress(self, duration, line):
-        if "out_time_ms" in line and duration > 0:  # Add check for duration > 0
+        if "out_time_ms" in line:
             try:
                 time_ms = int(line.split('=')[1])
                 time_s = time_ms / 1000000.0
                 progress = min(int((time_s / float(duration)) * 100), 100)
                 self.update_progress(f"Processing: {progress}%", progress)
             except (ValueError, IndexError):
-                self.update_progress("Processing...", 50)  # Default progress value
+                pass
 
 class VideoRenderThread(QThread):
     progress_updated = pyqtSignal(str, int)

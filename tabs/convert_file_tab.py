@@ -1,7 +1,8 @@
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, 
                             QFileDialog, QSizePolicy, QListWidget, QComboBox, 
                             QRadioButton, QButtonGroup, QLineEdit, QProgressBar,
-                            QSpinBox, QDoubleSpinBox, QMessageBox)
+                            QSpinBox, QDoubleSpinBox, QMessageBox, QScrollArea)
+
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont
 import os
@@ -277,15 +278,26 @@ class ConvertFileTab(QWidget):
         button_layout.addWidget(open_folder_btn)
         button_layout.addWidget(reset_btn)
         
-        # Progress bars container
-        self.progress_layout = QVBoxLayout()
-        
+        # Progress bars container with scroll area
+        progress_container = QWidget()
+        self.progress_layout = QVBoxLayout(progress_container)
+
+        # Create scroll area
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setWidget(progress_container)
+        scroll_area.setMinimumHeight(500)  # Set minimum height for scroll area
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+
         # Add all layouts to right side
         right_layout.addLayout(manual_settings)
         right_layout.addLayout(resolution_layout)
         right_layout.addLayout(output_layout)
         right_layout.addLayout(button_layout)
-        right_layout.addLayout(self.progress_layout)
+        right_layout.addWidget(scroll_area)  # Add scroll area instead of progress_layout
+        right_layout.addStretch()
+
         right_layout.addStretch()
         
         # Combine left and right layouts

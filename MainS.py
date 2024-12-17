@@ -71,7 +71,7 @@ class MainWindow(QMainWindow):
         self.loading_screen.close()
         
         # Khởi tạo giao diện chính
-        self.setWindowTitle("NH IMS full tools V1.01")
+        self.setWindowTitle("NH IMS full tools V1.2.0")
         self.setGeometry(100, 100, 1524, 768)
         self.setAcceptDrops(True)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
